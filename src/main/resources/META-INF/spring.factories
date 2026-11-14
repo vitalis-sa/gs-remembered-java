@@ -1,0 +1,2 @@
+# Carrega o .env antes de qualquer resolucao de placeholder (IDE, mvn spring-boot:run e jar).
+org.springframework.boot.EnvironmentPostProcessor=fiap.remembered.config.ConfiguracaoDotenv
