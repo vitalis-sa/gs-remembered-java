@@ -18,6 +18,10 @@
 		<spring-ai.version>2.0.1</spring-ai.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<springdoc.version>3.0.3</springdoc.version>
+		<!-- Mesma versao do swagger-core-jakarta que o springdoc traz. O Spring AI puxa
+		     swagger-annotations mais antigos, e sem este alinhamento o /api-docs responde 500
+		     (NoSuchMethodError em Schema.$dynamicRef). -->
+		<swagger-core.version>2.2.47</swagger-core.version>
 		<jjwt.version>0.12.6</jjwt.version>
 	</properties>
 	<dependencies>
@@ -143,6 +147,16 @@
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
+			<dependency>
+				<groupId>io.swagger.core.v3</groupId>
+				<artifactId>swagger-annotations-jakarta</artifactId>
+				<version>${swagger-core.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.swagger.core.v3</groupId>
+				<artifactId>swagger-annotations</artifactId>
+				<version>${swagger-core.version}</version>
+			</dependency>
 			<dependency>
 				<groupId>org.springframework.ai</groupId>
 				<artifactId>spring-ai-bom</artifactId>
