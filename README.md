@@ -18,7 +18,7 @@ Este repositório é a **API do idoso**: medicamentos, doses, avisos, pareamento
 | Saúde da API Java | https://rm566234-gs-api.azurewebsites.net/actuator/health |
 | Aplicação online: API .NET (cuidador) | https://rm566234-gs-dotnet.azurewebsites.net/api/v1 |
 | Coleção Postman para testar o fluxo | [`docs/Remembered_GS.postman_collection.json`](docs/Remembered_GS.postman_collection.json) (ver [Postman](#postman-fluxo-para-testar)) |
-| Prints do fluxo executado na Azure | [Evidências](#evidências-prints-do-fluxo-no-postman) |
+| Prints de cada endpoint executado no Swagger da Azure | [Evidências](#evidências-prints-de-cada-endpoint-no-swagger) |
 
 ## Grupo
 
@@ -265,46 +265,188 @@ Para importar: **Postman → Import →** selecione o arquivo → abra a coleç�
 | 8. Segurança | `401`, `403`, `404`, `400`, `409`, `422` esperados |
 | 9. Limpeza | Remove o medicamento e exclui a conta do idoso (LGPD) |
 
-> A pasta 5 segue as rotas do Plano Técnico da API .NET (`/auth/cadastro`, `/auth/login`, `/vinculos`). Se o Swagger da .NET tiver outro formato de corpo, ajuste só essa pasta.
+## Evidências: prints de cada endpoint no Swagger
 
-## Evidências: prints do fluxo no Swagger
+Uma requisição de **cada um dos 20 endpoints**, executada pelo *Try it out* do Swagger da API publicada na Azure (`https://rm566234-gs-api.azurewebsites.net/swagger-ui.html`), na ordem do fluxo de negócio. Um idoso novo é cadastrado no início e excluído no fim. O cuidador foi criado e vinculado pela API .NET, e o token dele foi usado no **Authorize** do Swagger da Java nas rotas de cuidador. Todos os dados são fictícios.
 
-### Fluxo de negócio, pasta por pasta
+| # | Endpoint | Token usado | Status |
+|---|---|---|---|
+| 1 | `POST /auth/cadastro` | nenhum | `201` |
+| 2 | `POST /auth/login` | nenhum | `200` |
+| 3 | `GET /me` | idoso | `200` |
+| 4 | `PUT /me` | idoso | `200` |
+| 5 | `PUT /me/push-token` | idoso | `204` |
+| 6 | `POST /idosos/{idosoId}/medicamentos` | idoso | `201` |
+| 7 | `GET /idosos/{idosoId}/medicamentos` | idoso | `200` |
+| 8 | `GET /medicamentos/{id}` | idoso | `200` |
+| 9 | `PUT /medicamentos/{id}` | idoso | `200` |
+| 10 | `GET /idosos/{idosoId}/doses` | idoso | `200` |
+| 11 | `POST /doses/{id}/confirmar` | idoso | `200` |
+| 12 | `POST /me/codigo-pareamento` | idoso | `200` |
+| 13 | `GET /avisos` | idoso | `200` |
+| 14 | `PATCH /avisos/{id}/lido` | idoso | `200` |
+| 15 | `POST /pareamento/validar` | cuidador | `200` |
+| 16 | `POST /idosos/{idosoId}/relatorios-adesao` | cuidador | `201` |
+| 17 | `GET /idosos/{idosoId}/relatorios-adesao` | cuidador | `200` |
+| 18 | `GET /relatorios-adesao/{id}` | cuidador | `200` |
+| 19 | `DELETE /medicamentos/{id}` | idoso | `204` |
+| 20 | `DELETE /me` | idoso | `204` |
+
+### Autenticação
 
 <details>
-<summary>1. Idosos: dados do idoso</summary>
+<summary>1. <code>POST /auth/cadastro</code>: cadastra o idoso e já devolve o token</summary>
 
-<img width="909" height="870" alt="image" src="https://github.com/user-attachments/assets/7b4b7d76-54ea-4db4-b7d8-7345db4fb8d0" />
-
-</details>
-
-<details>
-<summary>2. Medicamentos</summary>
-
-<img width="945" height="894" alt="image" src="https://github.com/user-attachments/assets/735812f3-db9c-475e-bcc9-b8fa18a1dde1" />
+![Cadastro do idoso](docs/evidencias/swagger/01-auth-cadastro.png)
 
 </details>
 
 <details>
-<summary>3. Doses</summary>
+<summary>2. <code>POST /auth/login</code>: login do idoso com JWT</summary>
 
-<img width="1152" height="885" alt="image" src="https://github.com/user-attachments/assets/5e143815-2b24-44ff-b31e-d2d35fe37f43" />
+![Login do idoso](docs/evidencias/swagger/02-auth-login.png)
+
+</details>
+
+### Conta do idoso
+
+<details>
+<summary>3. <code>GET /me</code>: perfil do idoso logado</summary>
+
+![Perfil do idoso](docs/evidencias/swagger/03-me-get.png)
 
 </details>
 
 <details>
-<summary>4. Pareamento: apenas o cuidador consegue acessar</summary>
+<summary>4. <code>PUT /me</code>: troca o nome</summary>
 
-<img width="963" height="874" alt="image" src="https://github.com/user-attachments/assets/b42a1143-0d02-40b3-95f3-5de390b18d12" />
-</details>
-
-<details>    
-<summary>5. Avisos ao idoso: o aviso chega pela fila RabbitMQ</summary>
-
-<img width="984" height="878" alt="image" src="https://github.com/user-attachments/assets/067a477e-a8aa-47f7-926a-4e376faf704b" />
+![Atualização do nome](docs/evidencias/swagger/04-me-put.png)
 
 </details>
 
+<details>
+<summary>5. <code>PUT /me/push-token</code>: registra o token de push do aparelho</summary>
+
+![Token de push](docs/evidencias/swagger/05-me-push-token.png)
+
+</details>
+
+<details>
+<summary>12. <code>POST /me/codigo-pareamento</code>: gera o código de pareamento de uso único</summary>
+
+![Código de pareamento](docs/evidencias/swagger/12-me-codigo-pareamento.png)
+
+</details>
+
+### Medicamentos
+
+<details>
+<summary>6. <code>POST /idosos/{idosoId}/medicamentos</code>: cadastra o medicamento com horários e gera as doses</summary>
+
+![Cadastro de medicamento](docs/evidencias/swagger/06-medicamentos-post.png)
+
+</details>
+
+<details>
+<summary>7. <code>GET /idosos/{idosoId}/medicamentos</code>: lista paginada</summary>
+
+![Lista paginada de medicamentos](docs/evidencias/swagger/07-medicamentos-listar.png)
+
+</details>
+
+<details>
+<summary>8. <code>GET /medicamentos/{id}</code>: busca por id</summary>
+
+![Busca de medicamento](docs/evidencias/swagger/08-medicamentos-get.png)
+
+</details>
+
+<details>
+<summary>9. <code>PUT /medicamentos/{id}</code>: atualiza a dosagem e regera as doses futuras</summary>
+
+![Atualização de medicamento](docs/evidencias/swagger/09-medicamentos-put.png)
+
+</details>
+
+<details>
+<summary>19. <code>DELETE /medicamentos/{id}</code>: remove o medicamento</summary>
+
+![Exclusão de medicamento](docs/evidencias/swagger/19-medicamentos-delete.png)
+
+</details>
+
+### Doses
+
+<details>
+<summary>10. <code>GET /idosos/{idosoId}/doses</code>: doses pendentes de amanhã, geradas sozinhas no cadastro</summary>
+
+![Doses do dia](docs/evidencias/swagger/10-doses-listar.png)
+
+</details>
+
+<details>
+<summary>11. <code>POST /doses/{id}/confirmar</code>: o idoso confirma a dose ("Tomei")</summary>
+
+![Confirmação da dose](docs/evidencias/swagger/11-doses-confirmar.png)
+
+</details>
+
+### Avisos (chegam pela fila RabbitMQ)
+
+<details>
+<summary>13. <code>GET /avisos</code>: o aviso do medicamento cadastrado pelo cuidador chegou pela fila</summary>
+
+![Lista de avisos](docs/evidencias/swagger/13-avisos-listar.png)
+
+</details>
+
+<details>
+<summary>14. <code>PATCH /avisos/{id}/lido</code>: marca o aviso como lido</summary>
+
+![Aviso lido](docs/evidencias/swagger/14-avisos-lido.png)
+
+</details>
+
+### Pareamento (cuidador)
+
+<details>
+<summary>15. <code>POST /pareamento/validar</code>: o cuidador valida e consome o código</summary>
+
+![Validação do código](docs/evidencias/swagger/15-pareamento-validar.png)
+
+</details>
+
+### Relatório de adesão com IA (cuidador)
+
+<details>
+<summary>16. <code>POST /idosos/{idosoId}/relatorios-adesao</code>: gera o relatório, com a análise escrita pela IA</summary>
+
+![Geração do relatório](docs/evidencias/swagger/16-relatorios-gerar.png)
+
+</details>
+
+<details>
+<summary>17. <code>GET /idosos/{idosoId}/relatorios-adesao</code>: lista paginada de relatórios</summary>
+
+![Lista de relatórios](docs/evidencias/swagger/17-relatorios-listar.png)
+
+</details>
+
+<details>
+<summary>18. <code>GET /relatorios-adesao/{id}</code>: busca o relatório por id</summary>
+
+![Busca de relatório](docs/evidencias/swagger/18-relatorios-get.png)
+
+</details>
+
+### Exclusão da conta (LGPD)
+
+<details>
+<summary>20. <code>DELETE /me</code>: exclui a conta do idoso com todos os dados</summary>
+
+![Exclusão da conta](docs/evidencias/swagger/20-me-delete.png)
+
+</details>
 
 ### Destaques
 
@@ -325,7 +467,13 @@ Testes unitários (JUnit 5, Mockito e AssertJ), sem banco nem RabbitMQ:
 | Teste | O que cobre |
 |---|---|
 | `JwtServiceTest` | Emissão do token do idoso, leitura do token do cuidador, issuer e claim `idosos` |
+| `JwtAuthenticationFilterTest` | Filtro JWT: token válido autentica com o papel certo; sem cabeçalho, token inválido ou sem `Bearer` não autentica |
 | `VinculoGuardTest` | Quem enxerga qual idoso (`403` na rota, `404` no recurso) |
+| `AuthServiceTest` | Cadastro com hash da senha e e-mail normalizado, e-mail repetido, login e mesma mensagem para senha e e-mail errados |
+| `MedicamentoServiceTest` | Quem criou o medicamento, agenda de doses e evento publicado, datas inválidas, atualização e medicamento de outro idoso |
+| `DoseServiceTest` | Confirmação pelo idoso e pelo cuidador, dose alheia (`404`), dose já registrada (`409`) e filtros por data e status |
+| `PareamentoServiceTest` | Código de 6 caracteres com validade de 15 minutos, código inexistente, expirado ou já usado |
+| `NovidadeServiceTest` | Aviso e push ao idoso, evento repetido sem aviso duplicado e cadastro do próprio idoso sem aviso |
 | `GeradorDeDosesTest` | Agenda de 7 dias, dias da semana (posição 0 = segunda) e regeração |
 | `AdesaoTest` | Cálculo do percentual de adesão |
 | `RegistroDoseTest` | Ciclo da dose: só PENDENTE é confirmável |
