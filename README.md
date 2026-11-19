@@ -318,6 +318,7 @@ Para importar: **Postman → Import →** selecione o arquivo → abra a coleç�
 ```bash
 ./mvnw test
 ```
+<img width="1865" height="457" alt="image" src="https://github.com/user-attachments/assets/74ae8431-f42d-4a1b-bfd6-4eb9f44f8eee" />
 
 Testes unitários (JUnit 5, Mockito e AssertJ), sem banco nem RabbitMQ:
 
