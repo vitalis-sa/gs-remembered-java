@@ -33,3 +33,6 @@ build/
 .vscode/
 
 .env
+
+# repositorio Maven local do projeto (alternativa ao .m2)
+.m2-local/

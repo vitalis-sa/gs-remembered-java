@@ -1,0 +1,1671 @@
+{
+  "info": {
+    "name": "Remembered - GS 2026/2 (fluxo completo)",
+    "description": "Fluxo de negócio do Remembered, na ordem em que o professor pode executar (Run collection).\n\nServiços: {{javaUrl}} (idoso, medicamentos, doses, avisos e relatórios com IA) e {{dotnetUrl}} (cuidador, vínculos e proxy de relatórios).\nCada execução cria um idoso e um cuidador novos, então pode ser repetida. Os scripts guardam tokens e ids em variáveis da coleção.\n\n0 Saúde → 1 Idoso → 2 Medicamentos → 3 Doses → 4 Pareamento → 5 Cuidador (.NET) → 6 Cuidador na Java (com IA) → 7 Avisos (fila) → 8 Segurança → 9 Limpeza.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Datas no fuso de Brasília (UTC-3), as mesmas que a API usa para gerar as doses.",
+          "const agora = Date.now() - 3 * 3600 * 1000;",
+          "pm.collectionVariables.set('dataHoje', new Date(agora).toISOString().slice(0, 10));",
+          "pm.collectionVariables.set('dataAmanha', new Date(agora + 86400000).toISOString().slice(0, 10));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "javaHost",
+      "value": "https://rm566234-gs-api.azurewebsites.net"
+    },
+    {
+      "key": "javaUrl",
+      "value": "https://rm566234-gs-api.azurewebsites.net/api/v1"
+    },
+    {
+      "key": "dotnetUrl",
+      "value": "https://rm566234-gs-dotnet.azurewebsites.net/api/v1"
+    },
+    {
+      "key": "tokenIdoso",
+      "value": ""
+    },
+    {
+      "key": "tokenCuidador",
+      "value": ""
+    },
+    {
+      "key": "tokenOutroIdoso",
+      "value": ""
+    },
+    {
+      "key": "idosoId",
+      "value": ""
+    },
+    {
+      "key": "medId",
+      "value": ""
+    },
+    {
+      "key": "medCuidadorId",
+      "value": ""
+    },
+    {
+      "key": "doseId",
+      "value": ""
+    },
+    {
+      "key": "codigo",
+      "value": ""
+    },
+    {
+      "key": "relatorioId",
+      "value": ""
+    },
+    {
+      "key": "avisoId",
+      "value": ""
+    },
+    {
+      "key": "sufixo",
+      "value": ""
+    },
+    {
+      "key": "emailIdoso",
+      "value": ""
+    },
+    {
+      "key": "emailCuidador",
+      "value": ""
+    },
+    {
+      "key": "dataHoje",
+      "value": ""
+    },
+    {
+      "key": "dataAmanha",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Saúde",
+      "item": [
+        {
+          "name": "0.1 Health da API Java",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaHost}}/actuator/health"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Sem token. Confirma que a API Java está no ar (status UP)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "pm.test('status UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Idoso (API Java)",
+      "item": [
+        {
+          "name": "1.1 Cadastrar idoso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/auth/cadastro"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Cria o idoso e já devolve o token JWT (24 h). Cada execução usa um e-mail novo, então a coleção pode ser repetida.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Maria Teste {{sufixo}}\",\n  \"email\": \"{{emailIdoso}}\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sufixo = Date.now().toString(36);",
+                  "pm.collectionVariables.set('sufixo', sufixo);",
+                  "pm.collectionVariables.set('emailIdoso', 'idoso.' + sufixo + '@teste.dev');",
+                  "pm.collectionVariables.set('emailCuidador', 'cuidador.' + sufixo + '@teste.dev');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (201)', function () { pm.expect([201]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('tokenIdoso', corpo.token);",
+                  "pm.collectionVariables.set('idosoId', corpo.usuario.id);",
+                  "pm.test('token é Bearer', function () { pm.expect(corpo.tipo).to.eql('Bearer'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Login do idoso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/auth/login"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Login com e-mail e senha. Devolve o mesmo formato do cadastro.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emailIdoso}}\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('tokenIdoso', corpo.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Perfil do idoso logado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/me"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Dados do idoso dono do token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "pm.test('e-mail confere', function () { pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get('emailIdoso')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Registrar o token de push do aparelho",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/me/push-token"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "O app envia o token do Expo para receber lembretes e avisos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pushToken\": \"ExponentPushToken[teste-{{sufixo}}]\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (204)', function () { pm.expect([204]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "O idoso é quem usa o app no dia a dia: cadastra-se na API Java e recebe o token JWT com o papel IDOSO."
+    },
+    {
+      "name": "2. Medicamentos (CRUD com paginação)",
+      "item": [
+        {
+          "name": "2.1 Cadastrar medicamento crítico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/medicamentos"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Losartana às 08:00 e 20:00. Ao salvar, a API gera as doses dos próximos 7 dias.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Losartana\",\n  \"dosagem\": \"50 mg\",\n  \"forma\": \"Comprimido\",\n  \"corIcone\": \"azul\",\n  \"formatoIcone\": \"redondo\",\n  \"critico\": true,\n  \"limitePulos\": 3,\n  \"dataInicio\": \"{{dataHoje}}\",\n  \"ativo\": true,\n  \"observacoes\": \"Tomar com água\",\n  \"horarios\": [\n    {\n      \"hora\": \"08:00\",\n      \"diasSemana\": \"1111111\"\n    },\n    {\n      \"hora\": \"20:00\",\n      \"diasSemana\": \"1111111\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (201)', function () { pm.expect([201]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('medId', corpo.id);",
+                  "pm.test('dois horários', function () { pm.expect(corpo.horarios.length).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Listar medicamentos do idoso (paginado)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/medicamentos?page=0&size=10&sort=nome"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Resposta é um Page: content, totalElements, totalPages."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "pm.test('traz o medicamento criado', function () { pm.expect(pm.response.json().totalElements).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Buscar medicamento por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/medicamentos/{{medId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Leitura por id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Atualizar o medicamento",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/medicamentos/{{medId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Troca a dosagem. As doses futuras ainda pendentes são regeradas.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Losartana\",\n  \"dosagem\": \"100 mg\",\n  \"forma\": \"Comprimido\",\n  \"corIcone\": \"azul\",\n  \"formatoIcone\": \"redondo\",\n  \"critico\": true,\n  \"limitePulos\": 3,\n  \"dataInicio\": \"{{dataHoje}}\",\n  \"ativo\": true,\n  \"observacoes\": \"Dose ajustada pelo médico\",\n  \"horarios\": [\n    {\n      \"hora\": \"08:00\",\n      \"diasSemana\": \"1111111\"\n    },\n    {\n      \"hora\": \"20:00\",\n      \"diasSemana\": \"1111111\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "pm.test('dosagem nova', function () { pm.expect(pm.response.json().dosagem).to.eql('100 mg'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "CRUD de Medicamento (com Horários) no Oracle via Spring Data JPA, com Bean Validation nos DTOs."
+    },
+    {
+      "name": "3. Doses e confirmação",
+      "item": [
+        {
+          "name": "3.1 Doses de hoje",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/doses"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Sem data, traz as de hoje. Pode vir vazio se os horários de hoje já passaram quando o remédio foi cadastrado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Doses de amanhã (guarda uma dose pendente)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/doses?data={{dataAmanha}}&status=PENDENTE"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Filtro por data e status. A agenda cobre 7 dias à frente, então amanhã sempre tem doses."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const doses = pm.response.json();",
+                  "pm.test('há doses pendentes', function () { pm.expect(doses.length).to.be.above(0); });",
+                  "if (doses.length) { pm.collectionVariables.set('doseId', doses[0].id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 Idoso confirma a dose (\"Tomei\")",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/doses/{{doseId}}/confirmar"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "A dose passa a TOMADA e guarda quem confirmou."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "pm.test('TOMADA', function () { pm.expect(pm.response.json().status).to.eql('TOMADA'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Confirmar de novo (409)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/doses/{{doseId}}/confirmar"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Regra de negócio: dose já registrada não pode ser confirmada outra vez."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (409)', function () { pm.expect([409]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Regra de negócio: doses geradas 7 dias à frente; PENDENTE vira TOMADA na confirmação."
+    },
+    {
+      "name": "4. Pareamento idoso e cuidador",
+      "item": [
+        {
+          "name": "4.1 Idoso gera o código de pareamento",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/me/codigo-pareamento"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Código de uso único, válido por 15 minutos. O idoso passa o código ao familiar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('codigo', corpo.codigo);",
+                  "pm.test('código gerado', function () { pm.expect(corpo.codigo).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Cuidador (API .NET)",
+      "item": [
+        {
+          "name": "5.1 Cadastrar cuidador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{dotnetUrl}}/auth/cadastro"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "O cuidador vive na API .NET, que emite o JWT dele (papel CUIDADOR) com o mesmo segredo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Carlos Cuidador {{sufixo}}\",\n  \"email\": \"{{emailCuidador}}\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200 ou 201)', function () { pm.expect([200, 201]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('tokenCuidador', corpo.token || corpo.accessToken || pm.collectionVariables.get('tokenCuidador'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Login do cuidador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{dotnetUrl}}/auth/login"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Login na API .NET.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emailCuidador}}\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('tokenCuidador', corpo.token || corpo.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Cuidador vincula-se ao idoso com o código",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{dotnetUrl}}/vinculos"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "A .NET chama POST /pareamento/validar na API Java, que confere e consome o código.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200 ou 201)', function () { pm.expect([200, 201]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Login de novo (o token ganha a claim idosos)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{dotnetUrl}}/auth/login"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "O token emitido antes do vínculo não lista o idoso. Um novo login traz a claim `idosos` com o id.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emailCuidador}}\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('tokenCuidador', corpo.token || corpo.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Listar vínculos do cuidador",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dotnetUrl}}/vinculos"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "O idoso aparece na lista."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Corpos e rotas desta pasta seguem o Plano Técnico; se o Swagger da .NET divergir, ajuste o corpo aqui."
+    },
+    {
+      "name": "6. Cuidador usa a API Java com o token da .NET",
+      "item": [
+        {
+          "name": "6.1 Cuidador lista os medicamentos do idoso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/medicamentos"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "O mesmo token da .NET vale na Java: a claim `idosos` autoriza o acesso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Cuidador cadastra um medicamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/medicamentos"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Dispara o evento `medicamento.criado` no RabbitMQ: o consumidor cria um aviso para o idoso.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Metformina\",\n  \"dosagem\": \"850 mg\",\n  \"forma\": \"Comprimido\",\n  \"corIcone\": \"azul\",\n  \"formatoIcone\": \"redondo\",\n  \"critico\": false,\n  \"limitePulos\": 3,\n  \"dataInicio\": \"{{dataHoje}}\",\n  \"ativo\": true,\n  \"observacoes\": \"Após o almoço\",\n  \"horarios\": [\n    {\n      \"hora\": \"12:00\",\n      \"diasSemana\": \"1111111\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (201)', function () { pm.expect([201]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('medCuidadorId', corpo.id);",
+                  "pm.test('criado pelo cuidador', function () { pm.expect(corpo.criadoPorTipo).to.eql('CUIDADOR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.3 Cuidador acompanha as doses do idoso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/doses"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Doses de hoje do idoso vinculado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.4 Relatório de adesão com IA (pela API .NET)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{dotnetUrl}}/idosos/{{idosoId}}/relatorios-adesao"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "A .NET repassa o pedido à Java, onde o Spring AI chama o Groq. Exige `Idempotency-Key`: a mesma chave devolve a resposta salva sem gastar IA de novo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200 ou 201)', function () { pm.expect([200, 201]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.test('traz o percentual', function () { pm.expect(corpo).to.have.property('percentualAdesao'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.5 Relatório de adesão direto na API Java",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/relatorios-adesao"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "A IA só redige a partir de números já calculados. Se o Groq demorar mais de 15 s, o relatório sai só com os números e um `aviso`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (201)', function () { pm.expect([201]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('relatorioId', corpo.id);",
+                  "pm.test('análise da IA ou aviso', function () { pm.expect(corpo.analise !== null || corpo.aviso !== null).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.6 Listar relatórios do idoso (paginado)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/relatorios-adesao?page=0&size=5"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Mais recentes primeiro."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.7 Buscar relatório por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/relatorios-adesao/{{relatorioId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Leitura por id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "O cuidador acompanha o idoso: o token emitido pela .NET é aceito pela API Java (segredo e audience compartilhados)."
+    },
+    {
+      "name": "7. Avisos ao idoso (chegam pela fila)",
+      "item": [
+        {
+          "name": "7.1 Idoso lista os avisos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/avisos?lido=false&page=0&size=10"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "O aviso do medicamento cadastrado pelo cuidador chega pelo RabbitMQ (assíncrono): se vier vazio, rode a requisição de novo em alguns segundos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const pagina = pm.response.json();",
+                  "pm.collectionVariables.set('avisoId', pagina.content.length ? pagina.content[0].id : '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Marcar o aviso como lido",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/avisos/{{avisoId}}/lido"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Só roda se o aviso já chegou."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('avisoId')) { try { pm.execution.skipRequest(); } catch (e) { } }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Segurança (respostas de erro esperadas)",
+      "item": [
+        {
+          "name": "8.1 Sem token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/me"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Rota protegida sem Authorization."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (401)', function () { pm.expect([401]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 Cuidador em rota de idoso (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/me"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Papel CUIDADOR não acessa /me."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (403)', function () { pm.expect([403]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 Idoso em rota de cuidador (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/relatorios-adesao"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Relatórios são só do CUIDADOR.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (403)', function () { pm.expect([403]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.4 Login de outro idoso (usuário de teste)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/auth/login"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Usuário fictício criado pela migration V3.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jose.idoso@teste.dev\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (200)', function () { pm.expect([200]).to.include(pm.response.code); });",
+                  "const corpo = pm.response.json();",
+                  "pm.collectionVariables.set('tokenOutroIdoso', corpo.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.5 Outro idoso pede medicamento alheio (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/medicamentos/{{medId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenOutroIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Recurso de outra pessoa responde 404, igual a não existir: um 403 confirmaria que o id existe."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (404)', function () { pm.expect([404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.6 Outro idoso pede a lista de quem não é ele (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/idosos/{{idosoId}}/medicamentos"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenOutroIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "O id da rota não é o dele."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (403)', function () { pm.expect([403]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.7 Validação: senha curta (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/auth/cadastro"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Bean Validation: a resposta lista os campos inválidos em `errors`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Sem Senha\",\n  \"email\": \"invalido@teste.dev\",\n  \"senha\": \"123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (400)', function () { pm.expect([400]).to.include(pm.response.code); });",
+                  "pm.test('erro por campo', function () { pm.expect(pm.response.json().errors.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.8 E-mail repetido (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/auth/cadastro"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Regra de negócio.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Repetida\",\n  \"email\": \"{{emailIdoso}}\",\n  \"senha\": \"Remembered@2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (409)', function () { pm.expect([409]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.9 Senha errada (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/auth/login"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Senha errada e e-mail inexistente respondem igual, para não revelar quais e-mails existem.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emailIdoso}}\",\n  \"senha\": \"senha-errada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (401)', function () { pm.expect([401]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.10 Código de pareamento inválido (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{javaUrl}}/pareamento/validar"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCuidador}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "O código já foi consumido no passo 5.3.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (422)', function () { pm.expect([422]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Limpeza (opcional)",
+      "item": [
+        {
+          "name": "9.1 Apagar o medicamento",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/medicamentos/{{medId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Remove também horários e doses."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (204)', function () { pm.expect([204]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9.2 Excluir a conta do idoso (LGPD)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{javaUrl}}/me"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenIdoso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Apaga o idoso com todos os dados dele."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status esperado (204)', function () { pm.expect([204]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

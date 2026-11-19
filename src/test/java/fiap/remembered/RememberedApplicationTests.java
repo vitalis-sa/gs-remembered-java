@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * O contexto completo precisa de Oracle e RabbitMQ no ar, entao nao e carregado nos testes unitarios.
  * Aqui fica a garantia do fuso unico da aplicacao.
  */
-class RememberedApplicationTests {
+class 	RememberedApplicationTests {
 
 	@Test
 	void fixaOFusoDeSaoPauloAoCarregarAAplicacao() {
