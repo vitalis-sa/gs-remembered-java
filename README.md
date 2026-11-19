@@ -18,6 +18,7 @@ Este repositório é a **API do idoso**: medicamentos, doses, avisos, pareamento
 | Saúde da API Java | https://rm566234-gs-api.azurewebsites.net/actuator/health |
 | Aplicação online: API .NET (cuidador) | https://rm566234-gs-dotnet.azurewebsites.net/api/v1 |
 | Coleção Postman para testar o fluxo | [`docs/Remembered_GS.postman_collection.json`](docs/Remembered_GS.postman_collection.json) (ver [Postman](#postman-fluxo-para-testar)) |
+| Prints do fluxo executado na Azure | [Evidências](#evidências-prints-do-fluxo-no-postman) |
 
 ## Grupo
 
@@ -265,6 +266,93 @@ Para importar: **Postman → Import →** selecione o arquivo → abra a coleç�
 | 9. Limpeza | Remove o medicamento e exclui a conta do idoso (LGPD) |
 
 > A pasta 5 segue as rotas do Plano Técnico da API .NET (`/auth/cadastro`, `/auth/login`, `/vinculos`). Se o Swagger da .NET tiver outro formato de corpo, ajuste só essa pasta.
+
+## Evidências: prints do fluxo no Postman
+
+A coleção acima foi executada de ponta a ponta (*Run collection*) contra os **serviços publicados na Azure**, em 19/11/2026: a API Java (`rm566234-gs-api`) e a API .NET (`rm566234-gs-dotnet`). Os dados são fictícios, criados pela própria coleção e apagados na pasta de limpeza. O token JWT foi ocultado nas imagens.
+
+### Resultado da execução
+
+<img src="docs/img/postman/00-run-collection-resumo.png" alt="Run collection com todos os testes aprovados" width="900">
+
+### Fluxo de negócio, pasta por pasta
+
+<details>
+<summary><strong>1. Idoso (API Java)</strong>: cadastro, login com JWT, perfil e token de push</summary>
+
+<img src="docs/img/postman/01-idoso.png" alt="Pasta 1: idoso" width="900">
+
+</details>
+
+<details>
+<summary><strong>2. Medicamentos</strong>: CRUD com validação e lista paginada</summary>
+
+<img src="docs/img/postman/02-medicamentos.png" alt="Pasta 2: medicamentos" width="900">
+
+</details>
+
+<details>
+<summary><strong>3. Doses e confirmação</strong>: agenda de 7 dias, "Tomei" e recusa de confirmar duas vezes (409)</summary>
+
+<img src="docs/img/postman/03-doses.png" alt="Pasta 3: doses" width="900">
+
+</details>
+
+<details>
+<summary><strong>4. Pareamento</strong>: o idoso gera o código de uso único</summary>
+
+<img src="docs/img/postman/04-pareamento.png" alt="Pasta 4: pareamento" width="900">
+
+</details>
+
+<details>
+<summary><strong>5. Cuidador (API .NET)</strong>: cadastro, login e vínculo com o idoso</summary>
+
+<img src="docs/img/postman/05-cuidador-dotnet.png" alt="Pasta 5: cuidador na API .NET" width="900">
+
+</details>
+
+<details>
+<summary><strong>6. Cuidador na API Java</strong>: o token da .NET vale na Java, e o relatório com IA</summary>
+
+<img src="docs/img/postman/06-cuidador-java.png" alt="Pasta 6: cuidador na API Java" width="900">
+
+</details>
+
+<details>
+<summary><strong>7. Avisos ao idoso</strong>: o aviso chega pela fila RabbitMQ</summary>
+
+<img src="docs/img/postman/07-avisos-fila.png" alt="Pasta 7: avisos" width="900">
+
+</details>
+
+<details>
+<summary><strong>8. Segurança</strong>: 401, 403, 404, 400, 409 e 422 esperados</summary>
+
+<img src="docs/img/postman/08-seguranca.png" alt="Pasta 8: segurança" width="900">
+
+</details>
+
+<details>
+<summary><strong>9. Limpeza</strong>: remoção do medicamento e exclusão da conta (LGPD)</summary>
+
+<img src="docs/img/postman/09-limpeza.png" alt="Pasta 9: limpeza" width="900">
+
+</details>
+
+### Destaques
+
+**Relatório de adesão escrito pela IA** (`POST /idosos/{id}/relatorios-adesao`, resposta com `analise`):
+
+<img src="docs/img/postman/10-relatorio-ia.png" alt="Resposta do relatório de adesão com a análise da IA" width="900">
+
+**API Java no ar na Azure** (`/actuator/health` com `status: UP`):
+
+<img src="docs/img/postman/11-health-azure.png" alt="Health da API Java na Azure" width="900">
+
+**Fila no CloudAMQP** (exchange `remembered.eventos` e as filas de aviso):
+
+<img src="docs/img/postman/12-cloudamqp.png" alt="Fila no CloudAMQP" width="900">
 
 ## Testes automatizados
 
